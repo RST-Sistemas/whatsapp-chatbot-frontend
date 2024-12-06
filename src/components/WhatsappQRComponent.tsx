@@ -17,32 +17,72 @@ export default function WhatsappQRComponent() {
   const [error, setError] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<string>('disconnected');
 
+  // URL de backend fija
+  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URLS || 'https://chatbot-funcional.vercel.app';
+
   const fetchQRCode = async (force: boolean = false) => {
     try {
       setLoading(true);
-      const response = await axios.get<QRResponse>(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/whatsapp/qr${force ? '?force=true' : ''}`, {
+      console.log(`🌐 Probando URL: ${backendUrl}`);
+      
+      const url = `${backendUrl}/api/whatsapp/qr${force ? '?force=true' : ''}`;
+      console.log(`🔗 URL completa: ${url}`);
+
+      // Configurar axios para manejar CORS
+      const response = await axios.get<QRResponse>(url, {
         headers: {
-          'Accept': 'application/json'
-        }
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        },
+        withCredentials: false,
+        timeout: 15000 // 15 segundos
       });
 
+      console.log('📦 Respuesta del backend:', response.data);
+
       if (response.data.qr) {
+        console.log('✅ QR recibido con éxito');
         setQRCode(response.data.qr);
         setConnectionStatus(response.data.connectionStatus || 'connecting');
         setError(null);
       } else {
+        console.warn('⚠️ Respuesta sin QR');
         setError(response.data.message || 'No se pudo generar el código QR');
       }
     } catch (err: any) {
-      console.error('Error al obtener QR:', err);
-      setError(err.response?.data?.message || 'Error al conectar con WhatsApp');
-      setQRCode(null);
+      console.error('❌ Error al obtener QR:', err);
+      
+      // Manejar específicamente errores de CORS
+      if (err.response) {
+        console.error('🚨 Datos de error del servidor:', err.response.data);
+        console.error('🔢 Código de estado:', err.response.status);
+        
+        if (err.response.status === 403 || err.response.status === 401) {
+          setError('Acceso denegado. Verifica la configuración de CORS.');
+        } else {
+          setError(err.response.data.message || `Error ${err.response.status}`);
+        }
+      } else if (err.request) {
+        console.error('🌐 Sin respuesta del servidor:', err.request);
+        
+        // Distinguir entre error de red y CORS
+        if (err.message === 'Network Error') {
+          setError('Error de red. Verifica tu conexión y configuración de CORS.');
+        } else {
+          setError('Sin respuesta del servidor');
+        }
+      } else {
+        console.error('⚙️ Error de configuración:', err.message);
+        setError(err.message);
+      }
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    console.log('🚀 Iniciando búsqueda de QR');
     fetchQRCode();
   }, []);
 
